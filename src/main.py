@@ -6,7 +6,7 @@ import time
 
 from src.utils.logger import setup_logging
 from src.config.config import settings_run
-from src.logic.elaboration import VideoPipeline
+from src.logic.pipeline import VideoPipeline
 
 setup_logging()
 logger = logging.getLogger(__name__)
