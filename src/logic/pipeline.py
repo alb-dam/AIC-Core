@@ -4,6 +4,7 @@ import time
 import threading
 import logging
 from typing import Optional
+import numpy as np
 
 from src.config.config import SettingsManager
 from src.inout.input import SRTInput
@@ -12,6 +13,7 @@ from src.logic.detector import Detector
 
 from src.logic.queues import DropFrameQueue, WorkerThread
 from src.logic.director import VirtualDirector
+from src.logic.debug import DebugRenderer
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ class VideoPipeline:
         self._last_reconnect_time: float = 0.0
         self._last_srt_shape: Optional[tuple] = None
         self._yolo_frame_counter: int = 0
+        self.debug_frame: Optional[np.ndarray] = None
         
         # Code DropFrame
         self.q_capture_to_inference = DropFrameQueue(maxsize=2)
@@ -120,6 +123,10 @@ class VideoPipeline:
 
         logger.info("Pipeline arrestata.")
 
+    def get_debug_frame(self) -> Optional[np.ndarray]:
+        """Restituisce l'ultimo frame con annotazioni di debug, se disponibile."""
+        return self.debug_frame
+
     # ── Thread Loops ───────────────────────────────────────────────────
 
     def _capture_loop(self) -> None:
@@ -203,20 +210,23 @@ class VideoPipeline:
         )
 
         dir_out = self.director.process(frame, det_out.action_center, det_out.player_spread)
-        self.q_tracking_to_render.put(dir_out.cropped_frame)
+        self.q_tracking_to_render.put((dir_out.cropped_frame, frame, det_out, dir_out))
 
     def _render_loop(self) -> None:
         out_fps = float(self.settings.get("output_fps"))
         frame_duration = 1.0 / out_fps if out_fps > 0 else 0.033
         loop_start = time.time()
         
-        obs_frame = self.q_tracking_to_render.get(timeout=0.1)
+        obs_frame, original_frame, det_out, dir_out = self.q_tracking_to_render.get(timeout=0.1)
         
         out_w = int(self.settings.get("output_width"))
         out_h = int(self.settings.get("output_height"))
         
         ai_frame = self.video_output.resize_and_pad(obs_frame, (out_w, out_h))
         self.video_output.send_ai_frame(ai_frame)
+
+        if self.settings.get("debug"):
+            self.debug_frame = DebugRenderer.draw_preview(original_frame, det_out, dir_out)
 
         sleep_time = frame_duration - (time.time() - loop_start)
         if sleep_time > 0:

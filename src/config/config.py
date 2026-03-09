@@ -64,7 +64,9 @@ class AppSettings:
     
     # Fattore di addolcimento (smoothing) direzionale (Pan e Tilt).
     director_pan_tilt_smoothing: float = 0.1
-
+    
+    # Debug Preview
+    debug: bool = False
 
 class SettingsManager:
     """Gestione del ciclo di vita dei settings (load, save, get, set)."""
